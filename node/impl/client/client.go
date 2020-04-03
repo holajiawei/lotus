@@ -410,3 +410,30 @@ func (a *API) ClientQueryAsk(ctx context.Context, p peer.ID, miner address.Addre
 	}
 	return signedAsk, nil
 }
+
+func (a *API) ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, miner address.Address) (*api.CommPRet, error) {
+	ssize, err := a.StateMinerSectorSize(ctx, miner, types.EmptyTSK)
+	if err != nil {
+		return nil, xerrors.Errorf("failed checking miners sector size: %w", err)
+	}
+
+	rt, _, err := ffiwrapper.ProofTypeFromSectorSize(ssize)
+	if err != nil {
+		return nil, xerrors.Errorf("bad sector size: %w", err)
+	}
+
+	c, s, err := a.SMDealClient.CalculateCommP(
+		ctx,
+		d,
+		rt,
+	)
+
+	if err != nil {
+		return nil, xerrors.Errorf("failed to calculate commP: %w", err)
+	}
+
+	return &api.CommPRet{
+		Root: c,
+		Size: s,
+	}, nil
+}

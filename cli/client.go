@@ -25,6 +25,7 @@ var clientCmd = &cli.Command{
 	Usage: "Make deals, store data, retrieve data",
 	Subcommands: []*cli.Command{
 		clientImportCmd,
+		clientCommPCmd,
 		clientLocalCmd,
 		clientDealCmd,
 		clientFindCmd,
@@ -41,7 +42,7 @@ var clientImportCmd = &cli.Command{
 	Flags: []cli.Flag{
 		&cli.BoolFlag{
 			Name:  "car",
-			Usage: "export to a car file instead of a regular file",
+			Usage: "import from a car file instead of a regular file",
 		},
 	},
 	Action: func(cctx *cli.Context) error {
@@ -65,6 +66,43 @@ var clientImportCmd = &cli.Command{
 			return err
 		}
 		fmt.Println(c.String())
+		return nil
+	},
+}
+
+var clientCommPCmd = &cli.Command{
+	Name:      "commP",
+	Usage:     "calculate the piece-cid (coomP) of an imported file",
+	ArgsUsage: "[dataCid minerAddress]",
+	Action: func(cctx *cli.Context) error {
+		api, closer, err := GetFullNodeAPI(cctx)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		ctx := ReqContext(cctx)
+
+		data, err := cid.Parse(cctx.Args().Get(0))
+		if err != nil {
+			return err
+		}
+
+		miner, err := address.NewFromString(cctx.Args().Get(1))
+		if err != nil {
+			return err
+		}
+
+		ref := &storagemarket.DataRef{
+			TransferType: storagemarket.TTManual,
+			Root:         data,
+		}
+
+		ret, err := api.ClientCalcCommP(ctx, ref, miner)
+		if err != nil {
+			return err
+		}
+		fmt.Println("CID: ", ret.Root)
+		fmt.Println("Piece size: ", ret.Size)
 		return nil
 	},
 }
