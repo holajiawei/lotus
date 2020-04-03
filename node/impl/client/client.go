@@ -3,6 +3,9 @@ package client
 import (
 	"context"
 	"errors"
+	ipldfree "github.com/ipld/go-ipld-prime/impl/free"
+	"github.com/ipld/go-ipld-prime/traversal/selector"
+	"github.com/ipld/go-ipld-prime/traversal/selector/builder"
 	"io"
 	"os"
 
@@ -202,54 +205,10 @@ func (a *API) ClientFindData(ctx context.Context, root cid.Cid) ([]api.QueryOffe
 }
 
 func (a *API) ClientImport(ctx context.Context, ref api.FileRef) (cid.Cid, error) {
-	f, err := os.Open(ref.Path)
-	if err != nil {
-		return cid.Undef, err
-	}
-
-	stat, err := f.Stat()
-	if err != nil {
-		return cid.Undef, err
-	}
-
-	file, err := files.NewReaderPathFile(ref.Path, f, stat)
-	if err != nil {
-		return cid.Undef, err
-	}
-	if ref.IsCAR {
-		var store car.Store
-		if a.Filestore == nil {
-			store = a.Blockstore
-		} else {
-			store = (*filestore.Filestore)(a.Filestore)
-		}
-		result, err := car.LoadCar(store, file)
-		if err != nil {
-			return cid.Undef, err
-		}
-
-		if len(result.Roots) != 1 {
-			return cid.Undef, xerrors.New("cannot import car with more than one root")
-		}
-
-		return result.Roots[0], nil
-	}
 
 	bufferedDS := ipld.NewBufferedDAG(ctx, a.LocalDAG)
+	nd, err := a.clientImport(ref, bufferedDS)
 
-	params := ihelper.DagBuilderParams{
-		Maxlinks:   build.UnixfsLinksPerLevel,
-		RawLeaves:  true,
-		CidBuilder: nil,
-		Dagserv:    bufferedDS,
-		NoCopy:     true,
-	}
-
-	db, err := params.New(chunker.NewSizeSplitter(file, int64(build.UnixfsChunkSize)))
-	if err != nil {
-		return cid.Undef, err
-	}
-	nd, err := balanced.Layout(db)
 	if err != nil {
 		return cid.Undef, err
 	}
@@ -258,7 +217,7 @@ func (a *API) ClientImport(ctx context.Context, ref api.FileRef) (cid.Cid, error
 		return cid.Undef, err
 	}
 
-	return nd.Cid(), nil
+	return nd, nil
 }
 
 func (a *API) ClientImportLocal(ctx context.Context, f io.Reader) (cid.Cid, error) {
@@ -436,4 +395,88 @@ func (a *API) ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, min
 		Root: c,
 		Size: s,
 	}, nil
+}
+
+func (a *API) ClientGenCar(ctx context.Context, ref api.FileRef, outputPath string) error {
+
+	bufferedDS := ipld.NewBufferedDAG(ctx, a.LocalDAG)
+	c, err := a.clientImport(ref, bufferedDS)
+
+	if err != nil {
+		return err
+	}
+
+	ssb := builder.NewSelectorSpecBuilder(ipldfree.NodeBuilder())
+
+	// entire DAG selector
+	allSelector := ssb.ExploreRecursive(selector.RecursionLimitNone(),
+		ssb.ExploreAll(ssb.ExploreRecursiveEdge())).Node()
+
+	f, err := os.Create(outputPath)
+	defer f.Close()
+	if err != nil {
+		return err
+	}
+
+	sc := car.NewSelectiveCar(ctx, a.Blockstore, []car.Dag{{Root: c, Selector: allSelector}})
+	if err = sc.Write(f); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (a *API) clientImport(ref api.FileRef, bufferedDS *ipld.BufferedDAG) (cid.Cid, error) {
+	f, err := os.Open(ref.Path)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	stat, err := f.Stat()
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	file, err := files.NewReaderPathFile(ref.Path, f, stat)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	if ref.IsCAR {
+		var store car.Store
+		if a.Filestore == nil {
+			store = a.Blockstore
+		} else {
+			store = (*filestore.Filestore)(a.Filestore)
+		}
+		result, err := car.LoadCar(store, file)
+		if err != nil {
+			return cid.Undef, err
+		}
+
+		if len(result.Roots) != 1 {
+			return cid.Undef, xerrors.New("cannot import car with more than one root")
+		}
+
+		return result.Roots[0], nil
+	}
+
+	params := ihelper.DagBuilderParams{
+		Maxlinks:   build.UnixfsLinksPerLevel,
+		RawLeaves:  true,
+		CidBuilder: nil,
+		Dagserv:    bufferedDS,
+		NoCopy:     true,
+	}
+
+	db, err := params.New(chunker.NewSizeSplitter(file, int64(build.UnixfsChunkSize)))
+	if err != nil {
+		return cid.Undef, err
+	}
+	nd, err := balanced.Layout(db)
+	if err != nil {
+		return cid.Undef, err
+	}
+
+	return nd.Cid(), nil
 }
