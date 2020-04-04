@@ -73,8 +73,8 @@ var clientImportCmd = &cli.Command{
 
 var clientCommPCmd = &cli.Command{
 	Name:      "commP",
-	Usage:     "calculate the piece-cid (coomP) of an imported file",
-	ArgsUsage: "[dataCid minerAddress]",
+	Usage:     "calculate the piece-cid (coomP) of a CAR file",
+	ArgsUsage: "[inputFile minerAddress]",
 	Action: func(cctx *cli.Context) error {
 		api, closer, err := GetFullNodeAPI(cctx)
 		if err != nil {
@@ -83,9 +83,8 @@ var clientCommPCmd = &cli.Command{
 		defer closer()
 		ctx := ReqContext(cctx)
 
-		data, err := cid.Parse(cctx.Args().Get(0))
-		if err != nil {
-			return err
+		if cctx.Args().Len() != 2 {
+			return fmt.Errorf("usage: commP <inputPath> <minerAddr>")
 		}
 
 		miner, err := address.NewFromString(cctx.Args().Get(1))
@@ -93,12 +92,7 @@ var clientCommPCmd = &cli.Command{
 			return err
 		}
 
-		ref := &storagemarket.DataRef{
-			TransferType: storagemarket.TTManual,
-			Root:         data,
-		}
-
-		ret, err := api.ClientCalcCommP(ctx, ref, miner)
+		ret, err := api.ClientCalcCommP(ctx, cctx.Args().Get(0), miner)
 		if err != nil {
 			return err
 		}
@@ -165,17 +159,13 @@ var clientDealCmd = &cli.Command{
 	Usage:     "Initialize storage deal with a miner",
 	ArgsUsage: "[dataCid miner price duration]",
 	Flags: []cli.Flag{
-		&cli.BoolFlag{
-			Name:  "manual-transfer",
-			Usage: "data will be transferred out of band",
-		},
 		&cli.StringFlag{
 			Name:  "manual-piece-cid",
-			Usage: "manually specify piece commitment for data",
+			Usage: "manually specify piece commitment for data (dataCid must be to a car file)",
 		},
 		&cli.Int64Flag{
 			Name:  "manual-piece-size",
-			Usage: "if manually specifying piece cid, used to specify size",
+			Usage: "if manually specifying piece cid, used to specify size (dataCid must be to a car file)",
 		},
 		&cli.StringFlag{
 			Name:  "from",
@@ -194,7 +184,7 @@ var clientDealCmd = &cli.Command{
 			return xerrors.New("expected 4 args: dataCid, miner, price, duration")
 		}
 
-		// [data, miner, dur]
+		// [data, miner, price, dur]
 
 		data, err := cid.Parse(cctx.Args().Get(0))
 		if err != nil {
@@ -235,9 +225,6 @@ var clientDealCmd = &cli.Command{
 			TransferType: storagemarket.TTGraphsync,
 			Root:         data,
 		}
-		if cctx.Bool("manual-transfer") {
-			ref.TransferType = storagemarket.TTManual
-		}
 
 		if mpc := cctx.String("manual-piece-cid"); mpc != "" {
 			c, err := cid.Parse(mpc)
@@ -253,6 +240,8 @@ var clientDealCmd = &cli.Command{
 			}
 
 			ref.PieceSize = abi.UnpaddedPieceSize(psize)
+
+			ref.TransferType = storagemarket.TTManual
 		}
 
 		proposal, err := api.ClientStartDeal(ctx, &lapi.StartDealParams{

@@ -102,7 +102,7 @@ type FullNode interface {
 	ClientFindData(ctx context.Context, root cid.Cid) ([]QueryOffer, error)
 	ClientRetrieve(ctx context.Context, order RetrievalOrder, ref FileRef) error
 	ClientQueryAsk(ctx context.Context, p peer.ID, miner address.Address) (*storagemarket.SignedStorageAsk, error)
-	ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, miner address.Address) (*CommPRet, error)
+	ClientCalcCommP(ctx context.Context, path string, miner address.Address) (*CommPRet, error)
 	ClientGenCar(ctx context.Context, ref FileRef, path string) error
 
 	// ClientUnimport removes references to the specified file from filestore

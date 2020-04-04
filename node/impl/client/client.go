@@ -213,10 +213,6 @@ func (a *API) ClientImport(ctx context.Context, ref api.FileRef) (cid.Cid, error
 		return cid.Undef, err
 	}
 
-	if err := bufferedDS.Commit(); err != nil {
-		return cid.Undef, err
-	}
-
 	return nd, nil
 }
 
@@ -370,7 +366,7 @@ func (a *API) ClientQueryAsk(ctx context.Context, p peer.ID, miner address.Addre
 	return signedAsk, nil
 }
 
-func (a *API) ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, miner address.Address) (*api.CommPRet, error) {
+func (a *API) ClientCalcCommP(ctx context.Context, path string, miner address.Address) (*api.CommPRet, error) {
 	ssize, err := a.StateMinerSectorSize(ctx, miner, types.EmptyTSK)
 	if err != nil {
 		return nil, xerrors.Errorf("failed checking miners sector size: %w", err)
@@ -381,11 +377,7 @@ func (a *API) ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, min
 		return nil, xerrors.Errorf("bad sector size: %w", err)
 	}
 
-	c, s, err := a.SMDealClient.CalculateCommP(
-		ctx,
-		d,
-		rt,
-	)
+	c, s, err := a.SMDealClient.CalculateCommP(path, rt)
 
 	if err != nil {
 		return nil, xerrors.Errorf("failed to calculate commP: %w", err)
@@ -406,6 +398,7 @@ func (a *API) ClientGenCar(ctx context.Context, ref api.FileRef, outputPath stri
 		return err
 	}
 
+	defer bufferedDS.Remove(ctx, c)
 	ssb := builder.NewSelectorSpecBuilder(ipldfree.NodeBuilder())
 
 	// entire DAG selector
@@ -475,6 +468,10 @@ func (a *API) clientImport(ref api.FileRef, bufferedDS *ipld.BufferedDAG) (cid.C
 	}
 	nd, err := balanced.Layout(db)
 	if err != nil {
+		return cid.Undef, err
+	}
+
+	if err := bufferedDS.Commit(); err != nil {
 		return cid.Undef, err
 	}
 

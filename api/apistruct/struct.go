@@ -111,7 +111,7 @@ type FullNodeStruct struct {
 		ClientListDeals   func(ctx context.Context) ([]api.DealInfo, error)                                                    `perm:"write"`
 		ClientRetrieve    func(ctx context.Context, order api.RetrievalOrder, ref api.FileRef) error                           `perm:"admin"`
 		ClientQueryAsk    func(ctx context.Context, p peer.ID, miner address.Address) (*storagemarket.SignedStorageAsk, error) `perm:"read"`
-		ClientCalcCommP   func(ctx context.Context, d *storagemarket.DataRef, miner address.Address) (*api.CommPRet, error)    `perm:"read"`
+		ClientCalcCommP   func(ctx context.Context, path string, miner address.Address) (*api.CommPRet, error)                 `perm:"read"`
 		ClientGenCar      func(ctx context.Context, ref api.FileRef, path string) error                                        `perm:"write"`
 
 		StateNetworkName        func(context.Context) (dtypes.NetworkName, error)                                                            `perm:"read"`
@@ -310,8 +310,8 @@ func (c *FullNodeStruct) ClientQueryAsk(ctx context.Context, p peer.ID, miner ad
 	return c.Internal.ClientQueryAsk(ctx, p, miner)
 }
 
-func (c *FullNodeStruct) ClientCalcCommP(ctx context.Context, d *storagemarket.DataRef, miner address.Address) (*api.CommPRet, error) {
-	return c.Internal.ClientCalcCommP(ctx, d, miner)
+func (c *FullNodeStruct) ClientCalcCommP(ctx context.Context, path string, miner address.Address) (*api.CommPRet, error) {
+	return c.Internal.ClientCalcCommP(ctx, path, miner)
 }
 
 func (c *FullNodeStruct) ClientGenCar(ctx context.Context, ref api.FileRef, path string) error {
